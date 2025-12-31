@@ -7,9 +7,10 @@ An interactive educational applet that demonstrates how Earth's orbital position
 ### Features
 
 - **Orbital View**: Visual representation of Earth's position around the sun throughout the year
-  - Shows day/night terminator on Earth
-  - Red marker indicates your selected latitude position
-  - Visualizes planet rotation in real-time
+  - **Yellow axis bar**: Shows Earth's rotational axis - maintains constant orientation in space (this is what causes seasons!)
+  - **Day/night terminator**: Dark overlay shows the hemisphere facing away from the sun
+  - **Red marker**: Indicates your selected latitude at the subsolar meridian (only moves with latitude slider)
+  - **Cyan dot**: Rotation indicator on the equator (shows planet rotation as you change the rotation angle)
 - **Interactive Controls**:
   - Orbital Position slider: Choose any day of the year (0-360°)
   - Latitude selector: Pick any latitude from South Pole (-90°) to North Pole (90°)
