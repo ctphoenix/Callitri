@@ -432,15 +432,15 @@
 
             orbitalCtx.restore();
 
-            // Draw selected latitude point
+            // Draw selected latitude point (at the subsolar/noon meridian)
+            // The red dot only shows LATITUDE, not rotation
             orbitalCtx.save();
             orbitalCtx.translate(earthX, earthY);
 
-            // Rotate for planet's rotation angle and tilt
-            const totalRotation = sunDirection + (rotationAngle * DEG_TO_RAD);
-            orbitalCtx.rotate(totalRotation);
+            // Rotate to align with sun (but NOT with planet rotation)
+            orbitalCtx.rotate(sunDirection);
 
-            // Position marker at selected latitude
+            // Position marker at selected latitude on the day side
             // Latitude affects vertical position on the visible disk
             const latRadius = 25 * Math.cos(latitude * DEG_TO_RAD);
             const latY = -25 * Math.sin(latitude * DEG_TO_RAD);
@@ -448,22 +448,41 @@
             // Draw marker
             orbitalCtx.fillStyle = '#FF6B6B';
             orbitalCtx.strokeStyle = '#FFF';
-            orbitalCtx.lineWidth = 1.5;
+            orbitalCtx.lineWidth = 2;
             orbitalCtx.beginPath();
-            orbitalCtx.arc(latRadius, latY, 4, 0, 2 * Math.PI);
+            orbitalCtx.arc(latRadius, latY, 5, 0, 2 * Math.PI);
             orbitalCtx.fill();
             orbitalCtx.stroke();
 
             orbitalCtx.restore();
 
-            // Draw axis tilt
-            const tiltAngle = (orbitalAngle + 90) * DEG_TO_RAD; // Axis points in consistent direction
+            // Draw rotation indicator on the equator to show planet rotation
+            orbitalCtx.save();
+            orbitalCtx.translate(earthX, earthY);
+
+            // Rotate by sun direction PLUS rotation angle
+            orbitalCtx.rotate(sunDirection + (rotationAngle * DEG_TO_RAD));
+
+            // Draw small indicator on equator
+            orbitalCtx.fillStyle = '#00D9FF';
+            orbitalCtx.strokeStyle = '#FFF';
+            orbitalCtx.lineWidth = 1.5;
+            orbitalCtx.beginPath();
+            orbitalCtx.arc(25, 0, 3, 0, 2 * Math.PI);
+            orbitalCtx.fill();
+            orbitalCtx.stroke();
+
+            orbitalCtx.restore();
+
+            // Draw axis tilt - FIXED orientation in space (this is key to seasons!)
+            // Axis always points in the same direction in the inertial frame
+            const axisAngleInSpace = (90 - AXIAL_TILT) * DEG_TO_RAD; // Fixed angle
             const axisLength = 40;
-            const axisDx = axisLength * Math.cos(tiltAngle + (90 - AXIAL_TILT) * DEG_TO_RAD);
-            const axisDy = axisLength * Math.sin(tiltAngle + (90 - AXIAL_TILT) * DEG_TO_RAD);
+            const axisDx = axisLength * Math.cos(axisAngleInSpace);
+            const axisDy = axisLength * Math.sin(axisAngleInSpace);
 
             orbitalCtx.strokeStyle = '#FFD700';
-            orbitalCtx.lineWidth = 2;
+            orbitalCtx.lineWidth = 3;
             orbitalCtx.beginPath();
             orbitalCtx.moveTo(earthX - axisDx, earthY - axisDy);
             orbitalCtx.lineTo(earthX + axisDx, earthY + axisDy);
