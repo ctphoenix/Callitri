@@ -207,11 +207,11 @@
 
             <div class="control-group">
                 <label>
-                    Time of Day (Local Solar Time):
-                    <span class="value-display" id="timeDisplay">00:00</span>
+                    Planet Rotation Angle:
+                    <span class="value-display" id="rotationDisplay">0° (Noon)</span>
                 </label>
                 <div class="day-controls">
-                    <input type="range" id="timeOfDay" min="0" max="24" value="12" step="0.1" style="flex: 1;">
+                    <input type="range" id="rotationAngle" min="0" max="360" value="0" step="1" style="flex: 1;">
                     <button id="playPauseBtn">▶ Play</button>
                     <button id="resetBtn">↺ Reset</button>
                 </div>
@@ -261,7 +261,7 @@
         // Get controls
         const orbitalAngleInput = document.getElementById('orbitalAngle');
         const latitudeInput = document.getElementById('latitude');
-        const timeOfDayInput = document.getElementById('timeOfDay');
+        const rotationAngleInput = document.getElementById('rotationAngle');
         const playPauseBtn = document.getElementById('playPauseBtn');
         const resetBtn = document.getElementById('resetBtn');
 
@@ -339,7 +339,7 @@
         }
 
         // Draw orbital view
-        function drawOrbitalView(orbitalAngle, declination) {
+        function drawOrbitalView(orbitalAngle, declination, rotationAngle, latitude) {
             const width = orbitalCanvas.width;
             const height = orbitalCanvas.height;
             const centerX = width / 2;
@@ -407,6 +407,55 @@
             orbitalCtx.lineWidth = 2;
             orbitalCtx.stroke();
 
+            // Draw day/night terminator
+            orbitalCtx.save();
+            orbitalCtx.translate(earthX, earthY);
+
+            // Calculate direction to sun for terminator
+            const sunDirection = Math.atan2(centerY - earthY, centerX - earthX);
+            orbitalCtx.rotate(sunDirection);
+
+            // Draw night side (left half)
+            orbitalCtx.fillStyle = 'rgba(0, 0, 40, 0.6)';
+            orbitalCtx.beginPath();
+            orbitalCtx.arc(0, 0, 25, Math.PI / 2, -Math.PI / 2, true);
+            orbitalCtx.closePath();
+            orbitalCtx.fill();
+
+            // Draw terminator line
+            orbitalCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            orbitalCtx.lineWidth = 1;
+            orbitalCtx.beginPath();
+            orbitalCtx.moveTo(0, -25);
+            orbitalCtx.lineTo(0, 25);
+            orbitalCtx.stroke();
+
+            orbitalCtx.restore();
+
+            // Draw selected latitude point
+            orbitalCtx.save();
+            orbitalCtx.translate(earthX, earthY);
+
+            // Rotate for planet's rotation angle and tilt
+            const totalRotation = sunDirection + (rotationAngle * DEG_TO_RAD);
+            orbitalCtx.rotate(totalRotation);
+
+            // Position marker at selected latitude
+            // Latitude affects vertical position on the visible disk
+            const latRadius = 25 * Math.cos(latitude * DEG_TO_RAD);
+            const latY = -25 * Math.sin(latitude * DEG_TO_RAD);
+
+            // Draw marker
+            orbitalCtx.fillStyle = '#FF6B6B';
+            orbitalCtx.strokeStyle = '#FFF';
+            orbitalCtx.lineWidth = 1.5;
+            orbitalCtx.beginPath();
+            orbitalCtx.arc(latRadius, latY, 4, 0, 2 * Math.PI);
+            orbitalCtx.fill();
+            orbitalCtx.stroke();
+
+            orbitalCtx.restore();
+
             // Draw axis tilt
             const tiltAngle = (orbitalAngle + 90) * DEG_TO_RAD; // Axis points in consistent direction
             const axisLength = 40;
@@ -445,12 +494,13 @@
         }
 
         // Draw sky view
-        function drawSkyView(latitude, declination, timeOfDay) {
+        function drawSkyView(latitude, declination, rotationAngle) {
             const width = skyCanvas.width;
             const height = skyCanvas.height;
 
-            // Hour angle (0 at solar noon, ±15° per hour)
-            const hourAngle = (timeOfDay - 12) * 15;
+            // Convert rotation angle to hour angle (0° rotation = solar noon = 0° hour angle)
+            // Rotation angle: 0° = noon, 90° = afternoon, 180° = midnight, 270° = morning
+            const hourAngle = rotationAngle > 180 ? rotationAngle - 360 : rotationAngle;
             const sunPos = calculateSunPosition(latitude, declination, hourAngle);
 
             // Sky gradient (day/night)
@@ -564,15 +614,31 @@
             skyCtx.fillRect(0, horizonY, width, height - horizonY);
         }
 
+        // Get rotation time label
+        function getRotationLabel(rotationAngle) {
+            if (rotationAngle < 15 || rotationAngle >= 345) return 'Noon';
+            if (rotationAngle < 45) return 'Early Afternoon';
+            if (rotationAngle < 75) return 'Afternoon';
+            if (rotationAngle < 105) return 'Late Afternoon';
+            if (rotationAngle < 135) return 'Evening';
+            if (rotationAngle < 165) return 'Night';
+            if (rotationAngle < 195) return 'Midnight';
+            if (rotationAngle < 225) return 'Night';
+            if (rotationAngle < 255) return 'Pre-Dawn';
+            if (rotationAngle < 285) return 'Early Morning';
+            if (rotationAngle < 315) return 'Morning';
+            return 'Late Morning';
+        }
+
         // Update display values
         function updateDisplay() {
             const orbitalAngle = parseFloat(orbitalAngleInput.value);
             const latitude = parseFloat(latitudeInput.value);
-            const timeOfDay = parseFloat(timeOfDayInput.value);
+            const rotationAngle = parseFloat(rotationAngleInput.value);
 
             const declination = calculateDeclination(orbitalAngle);
             const dayLength = calculateDayLength(latitude, declination);
-            const hourAngle = (timeOfDay - 12) * 15;
+            const hourAngle = rotationAngle > 180 ? rotationAngle - 360 : rotationAngle;
             const sunPos = calculateSunPosition(latitude, declination, hourAngle);
 
             // Update orbital display
@@ -586,11 +652,10 @@
                            latitude > 0 ? `${latitude}° N` : `${Math.abs(latitude)}° S`;
             document.getElementById('latitudeDisplay').textContent = `${latLabel}`;
 
-            // Update time display
-            const hours = Math.floor(timeOfDay);
-            const minutes = Math.floor((timeOfDay - hours) * 60);
-            document.getElementById('timeDisplay').textContent =
-                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            // Update rotation display
+            const rotationLabel = getRotationLabel(rotationAngle);
+            document.getElementById('rotationDisplay').textContent =
+                `${rotationAngle}° (${rotationLabel})`;
 
             // Update info panel
             const dayHours = Math.floor(dayLength);
@@ -618,15 +683,15 @@
             }
 
             // Redraw visualizations
-            drawOrbitalView(orbitalAngle, declination);
-            drawSkyView(latitude, declination, timeOfDay);
+            drawOrbitalView(orbitalAngle, declination, rotationAngle, latitude);
+            drawSkyView(latitude, declination, rotationAngle);
         }
 
         // Animation loop
         function animate() {
-            const timeOfDay = parseFloat(timeOfDayInput.value);
-            const newTime = (timeOfDay + 0.1) % 24;
-            timeOfDayInput.value = newTime;
+            const rotationAngle = parseFloat(rotationAngleInput.value);
+            const newAngle = (rotationAngle + 2) % 360;
+            rotationAngleInput.value = newAngle;
             updateDisplay();
 
             if (isPlaying) {
@@ -637,7 +702,7 @@
         // Event listeners
         orbitalAngleInput.addEventListener('input', updateDisplay);
         latitudeInput.addEventListener('input', updateDisplay);
-        timeOfDayInput.addEventListener('input', updateDisplay);
+        rotationAngleInput.addEventListener('input', updateDisplay);
 
         playPauseBtn.addEventListener('click', () => {
             isPlaying = !isPlaying;
@@ -653,7 +718,7 @@
         });
 
         resetBtn.addEventListener('click', () => {
-            timeOfDayInput.value = 12;
+            rotationAngleInput.value = 0;
             updateDisplay();
         });
 
