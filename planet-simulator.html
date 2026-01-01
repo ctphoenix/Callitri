@@ -472,23 +472,22 @@
             orbitalCtx.lineTo(earthX + axisDx, earthY + axisDy);
             orbitalCtx.stroke();
 
-            // Draw latitude marker relative to the planet's axis
-            // Latitude is measured from the equator (perpendicular to axis)
+            // Draw latitude marker at the subsolar meridian
+            // Position is determined by latitude (from planet's equator) and axis orientation
             orbitalCtx.save();
             orbitalCtx.translate(earthX, earthY);
+            orbitalCtx.rotate(sunDirection); // Align with sun
 
-            // The equator is perpendicular to the axis
-            // Axis is at (rotationAngle + 90)°, so equator plane is at rotationAngle°
-            const equatorAngle = rotationAngle * DEG_TO_RAD;
+            // In sun-aligned frame:
+            // - Axis appears at angle β = axisAngle - sunDirection
+            // - Marker is at latitude L on the subsolar meridian (facing sun)
+            // Position formula: along axis by sin(L), perpendicular by cos(L)
+            const beta = axisAngle - sunDirection;
+            const latRad = latitude * DEG_TO_RAD;
 
-            // Rotate to align with equator, then offset by latitude
-            orbitalCtx.rotate(equatorAngle);
-
-            // Position marker at the chosen latitude
-            // Latitude 0 = on equator, 90 = at north pole, -90 = at south pole
-            const latAngle = (90 - latitude) * DEG_TO_RAD; // Angle from north pole
-            const markerX = 25 * Math.sin(latAngle);
-            const markerY = -25 * Math.cos(latAngle); // Negative because canvas y is down
+            // Marker position accounting for axis tilt
+            const markerX = 25 * Math.sin(latRad + beta);
+            const markerY = -25 * Math.cos(latRad + beta);
 
             orbitalCtx.fillStyle = '#FF6B6B';
             orbitalCtx.strokeStyle = '#FFF';
