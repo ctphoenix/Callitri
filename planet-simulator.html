@@ -175,6 +175,26 @@
         .sky-view {
             height: 400px;
         }
+
+        .preset-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .preset-buttons button {
+            padding: 6px 12px;
+            font-size: 0.85em;
+            flex: 0 1 auto;
+        }
+
+        .section-title {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -198,6 +218,13 @@
                     <input type="range" id="dayOfYear" min="0" max="29" value="0" step="1" style="flex: 1;">
                     <button id="playYearBtn">▶ Play Year</button>
                 </div>
+                <div class="section-title" style="margin-top: 12px;">Quick Dates:</div>
+                <div class="preset-buttons">
+                    <button onclick="setDayOfYear(0)">Spring Equinox</button>
+                    <button onclick="setDayOfYear(7.5)">Summer Solstice</button>
+                    <button onclick="setDayOfYear(15)">Fall Equinox</button>
+                    <button onclick="setDayOfYear(22.5)">Winter Solstice</button>
+                </div>
             </div>
 
             <div class="control-group">
@@ -206,6 +233,12 @@
                     <span class="value-display" id="axisAngleDisplay">90°</span>
                 </label>
                 <input type="range" id="axisAngle" min="0" max="90" value="23" step="1">
+                <div class="section-title" style="margin-top: 12px;">Presets:</div>
+                <div class="preset-buttons">
+                    <button onclick="setAxisAngle(0)">No Tilt (0°)</button>
+                    <button onclick="setAxisAngle(23.5)">Earth (23.5°)</button>
+                    <button onclick="setAxisAngle(90)">Extreme (90°)</button>
+                </div>
             </div>
 
             <div class="control-group">
@@ -214,6 +247,16 @@
                     <span class="value-display" id="latitudeDisplay">0° (Equator)</span>
                 </label>
                 <input type="range" id="latitude" min="-90" max="90" value="0" step="1">
+                <div class="section-title" style="margin-top: 12px;">Key Latitudes:</div>
+                <div class="preset-buttons">
+                    <button onclick="setLatitude(90)">North Pole</button>
+                    <button onclick="setLatitude(66.5)">Arctic Circle</button>
+                    <button onclick="setLatitude(23.5)">Tropic of Cancer</button>
+                    <button onclick="setLatitude(0)">Equator</button>
+                    <button onclick="setLatitude(-23.5)">Tropic of Capricorn</button>
+                    <button onclick="setLatitude(-66.5)">Antarctic Circle</button>
+                    <button onclick="setLatitude(-90)">South Pole</button>
+                </div>
             </div>
 
             <div class="control-group">
@@ -224,6 +267,13 @@
                 <div class="day-controls">
                     <input type="range" id="hourOfDay" min="0" max="24" value="12" step="0.25" style="flex: 1;">
                     <button id="playPauseBtn">▶ Play Day</button>
+                </div>
+                <div class="section-title" style="margin-top: 12px;">Quick Times:</div>
+                <div class="preset-buttons">
+                    <button id="sunriseBtn" onclick="setToSunrise()">Sunrise</button>
+                    <button onclick="setHourOfDay(12)">Noon</button>
+                    <button id="sunsetBtn" onclick="setToSunset()">Sunset</button>
+                    <button onclick="setHourOfDay(0)">Midnight</button>
                 </div>
             </div>
         </div>
@@ -237,6 +287,14 @@
             <div class="info-item">
                 <div class="info-label">Day Length</div>
                 <div class="info-value" id="dayLength">12h 00m</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Sunrise Time</div>
+                <div class="info-value" id="sunriseTime">06:00</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Sunset Time</div>
+                <div class="info-value" id="sunsetTime">18:00</div>
             </div>
             <div class="info-item">
                 <div class="info-label">Solar Declination</div>
@@ -399,7 +457,23 @@
                 orbitalCtx.fill();
             }
 
-            // Draw sun
+            // Draw sun with rays
+            // Sun rays
+            orbitalCtx.strokeStyle = 'rgba(253, 184, 19, 0.4)';
+            orbitalCtx.lineWidth = 3;
+            for (let i = 0; i < 12; i++) {
+                const angle = (i * 30) * DEG_TO_RAD;
+                const x1 = centerX + 25 * Math.cos(angle);
+                const y1 = centerY + 25 * Math.sin(angle);
+                const x2 = centerX + 45 * Math.cos(angle);
+                const y2 = centerY + 45 * Math.sin(angle);
+                orbitalCtx.beginPath();
+                orbitalCtx.moveTo(x1, y1);
+                orbitalCtx.lineTo(x2, y2);
+                orbitalCtx.stroke();
+            }
+
+            // Sun glow
             const gradient = orbitalCtx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 40);
             gradient.addColorStop(0, '#FDB813');
             gradient.addColorStop(0.5, '#FFEB3B');
@@ -409,6 +483,7 @@
             orbitalCtx.arc(centerX, centerY, 40, 0, 2 * Math.PI);
             orbitalCtx.fill();
 
+            // Sun body
             orbitalCtx.fillStyle = '#FDB813';
             orbitalCtx.beginPath();
             orbitalCtx.arc(centerX, centerY, 20, 0, 2 * Math.PI);
@@ -471,6 +546,44 @@
             orbitalCtx.moveTo(earthX - axisDx, earthY - axisDy);
             orbitalCtx.lineTo(earthX + axisDx, earthY + axisDy);
             orbitalCtx.stroke();
+
+            // Draw N/S labels on axis
+            orbitalCtx.fillStyle = '#FFD700';
+            orbitalCtx.font = 'bold 14px sans-serif';
+            orbitalCtx.textAlign = 'center';
+            orbitalCtx.textBaseline = 'middle';
+
+            // North pole (top of axis)
+            const northX = earthX + axisDx;
+            const northY = earthY + axisDy;
+            orbitalCtx.fillStyle = '#000';
+            orbitalCtx.fillText('N', northX, northY);
+            orbitalCtx.strokeStyle = '#FFD700';
+            orbitalCtx.lineWidth = 3;
+            orbitalCtx.strokeText('N', northX, northY);
+
+            // South pole (bottom of axis)
+            const southX = earthX - axisDx;
+            const southY = earthY - axisDy;
+            orbitalCtx.fillStyle = '#000';
+            orbitalCtx.fillText('S', southX, southY);
+            orbitalCtx.strokeStyle = '#FFD700';
+            orbitalCtx.lineWidth = 3;
+            orbitalCtx.strokeText('S', southX, southY);
+
+            // Draw equator line (perpendicular to axis)
+            orbitalCtx.save();
+            orbitalCtx.translate(earthX, earthY);
+            orbitalCtx.rotate(axisAngle + Math.PI / 2); // Perpendicular to axis
+            orbitalCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            orbitalCtx.lineWidth = 2;
+            orbitalCtx.setLineDash([3, 3]);
+            orbitalCtx.beginPath();
+            orbitalCtx.moveTo(-25, 0);
+            orbitalCtx.lineTo(25, 0);
+            orbitalCtx.stroke();
+            orbitalCtx.setLineDash([]);
+            orbitalCtx.restore();
 
             // Draw latitude marker at the subsolar meridian
             // Position is determined by latitude (from planet's equator) and axis orientation
@@ -726,6 +839,28 @@
                 dayLength === 24 ? 'Polar Day' :
                 `${dayHours}h ${dayMinutes}m`;
 
+            // Calculate sunrise and sunset times
+            if (dayLength === 0) {
+                document.getElementById('sunriseTime').textContent = 'N/A';
+                document.getElementById('sunsetTime').textContent = 'N/A';
+            } else if (dayLength === 24) {
+                document.getElementById('sunriseTime').textContent = 'N/A';
+                document.getElementById('sunsetTime').textContent = 'N/A';
+            } else {
+                const sunriseHour = 12 - dayLength / 2;
+                const sunsetHour = 12 + dayLength / 2;
+
+                const srH = Math.floor(sunriseHour);
+                const srM = Math.floor((sunriseHour - srH) * 60);
+                const ssH = Math.floor(sunsetHour);
+                const ssM = Math.floor((sunsetHour - ssH) * 60);
+
+                document.getElementById('sunriseTime').textContent =
+                    `${srH.toString().padStart(2, '0')}:${srM.toString().padStart(2, '0')}`;
+                document.getElementById('sunsetTime').textContent =
+                    `${ssH.toString().padStart(2, '0')}:${ssM.toString().padStart(2, '0')}`;
+            }
+
             document.getElementById('declination').textContent = `${declination.toFixed(1)}°`;
 
             const season = getSeason(orbitalAngle);
@@ -812,6 +947,59 @@
                 }
             }
         });
+
+        // Preset button functions
+        function setDayOfYear(day) {
+            dayOfYearInput.value = day;
+            updateDisplay();
+        }
+
+        function setAxisAngle(angle) {
+            axisAngleInput.value = angle;
+            updateDisplay();
+        }
+
+        function setLatitude(lat) {
+            latitudeInput.value = lat;
+            updateDisplay();
+        }
+
+        function setHourOfDay(hour) {
+            hourOfDayInput.value = hour;
+            updateDisplay();
+        }
+
+        function setToSunrise() {
+            const dayOfYear = parseFloat(dayOfYearInput.value);
+            const axisAngle = parseFloat(axisAngleInput.value);
+            const latitude = parseFloat(latitudeInput.value);
+
+            const orbitalAngle = (dayOfYear * 360 / 30) % 360;
+            const declination = calculateDeclination(orbitalAngle, axisAngle);
+            const dayLength = calculateDayLength(latitude, declination);
+
+            if (dayLength > 0 && dayLength < 24) {
+                const sunriseHour = 12 - dayLength / 2;
+                hourOfDayInput.value = sunriseHour.toFixed(2);
+                updateDisplay();
+            }
+        }
+
+        function setToSunset() {
+            const dayOfYear = parseFloat(dayOfYearInput.value);
+            const axisAngle = parseFloat(axisAngleInput.value);
+            const latitude = parseFloat(latitudeInput.value);
+
+            const orbitalAngle = (dayOfYear * 360 / 30) % 360;
+            const declination = calculateDeclination(orbitalAngle, axisAngle);
+            const dayLength = calculateDayLength(latitude, declination);
+
+            if (dayLength > 0 && dayLength < 24) {
+                const sunsetHour = 12 + dayLength / 2;
+                hourOfDayInput.value = sunsetHour.toFixed(2);
+                updateDisplay();
+            }
+        }
 
         // Initial draw
         updateDisplay();
