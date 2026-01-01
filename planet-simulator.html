@@ -479,7 +479,7 @@
             orbitalCtx.rotate(sunDirection); // Align with sun
 
             // Correct geometry for latitude marker:
-            // We're in sun-aligned frame after rotation (sun is to the left at (-1,0))
+            // We're in sun-aligned frame after rotation (sun is to the RIGHT at (+1,0))
             // - Axis direction: (cos(axisAngle), sin(axisAngle))
             // - Point at latitude L on subsolar meridian:
             //   - Component along axis (toward north pole): sin(L)
@@ -487,8 +487,8 @@
             const latRad = latitude * DEG_TO_RAD;
 
             // Position = sin(L) * axis_direction + cos(L) * sun_direction
-            // where axis_direction = (cos(α), sin(α)) and sun_direction = (-1, 0)
-            const markerX = 25 * (Math.sin(latRad) * Math.cos(axisAngle) - Math.cos(latRad));
+            // where axis_direction = (cos(α), sin(α)) and sun_direction = (+1, 0)
+            const markerX = 25 * (Math.sin(latRad) * Math.cos(axisAngle) + Math.cos(latRad));
             const markerY = 25 * Math.sin(latRad) * Math.sin(axisAngle);
 
             orbitalCtx.fillStyle = '#FF6B6B';
