@@ -390,13 +390,15 @@
             const axisRad = axisAngle * DEG_TO_RAD;
             const hourAngleRad = (hourOfDay - 12) * 15 * DEG_TO_RAD;
 
-            // 1. Planet's rotation axis direction in 3D space
-            // Axis tilts in the plane perpendicular to sun-planet line, rotates with orbit
-            const axisX = Math.sin(axisRad) * Math.sin(orbitalRad);
-            const axisY = -Math.sin(axisRad) * Math.cos(orbitalRad);
+            // 1. Planet's rotation axis direction - FIXED in inertial space
+            // Axis tilts from vertical (Z) toward +Y direction by axisAngle
+            // This matches Earth-like behavior: axis stays fixed as planet orbits
+            const axisX = 0;
+            const axisY = Math.sin(axisRad);
             const axisZ = Math.cos(axisRad);
 
             // 2. Sun direction (from planet, parallel rays assumption)
+            // Rotates as planet orbits around sun
             const sunDirX = -Math.cos(orbitalRad);
             const sunDirY = -Math.sin(orbitalRad);
             const sunDirZ = 0;
@@ -413,6 +415,11 @@
                 sunEqX /= sunEqLen;
                 sunEqY /= sunEqLen;
                 sunEqZ /= sunEqLen;
+            } else {
+                // Sun parallel to axis - use arbitrary perpendicular direction
+                sunEqX = 1;
+                sunEqY = 0;
+                sunEqZ = 0;
             }
 
             // east = axis × sunEq (cross product)
