@@ -481,13 +481,13 @@
             // In sun-aligned frame:
             // - Axis appears at angle β = axisAngle - sunDirection
             // - Marker is at latitude L on the subsolar meridian (facing sun)
-            // Position formula: along axis by sin(L), perpendicular by cos(L)
+            // Position: rotate point at (R*cos(L), R*sin(L)) by angle β
             const beta = axisAngle - sunDirection;
             const latRad = latitude * DEG_TO_RAD;
 
-            // Marker position accounting for axis tilt
-            const markerX = 25 * Math.sin(latRad + beta);
-            const markerY = -25 * Math.cos(latRad + beta);
+            // Marker position accounting for axis tilt (corrected formula)
+            const markerX = 25 * Math.cos(latRad + beta);
+            const markerY = -25 * Math.sin(latRad + beta);
 
             orbitalCtx.fillStyle = '#FF6B6B';
             orbitalCtx.strokeStyle = '#FFF';
@@ -531,11 +531,24 @@
             // Calculate current sun position
             const sunPos = calculateSunPosition(latitude, declination, hourAngle);
 
-            // Background gradient (brightness depends on y-position only, not sun)
+            // Background gradient (brightness varies with y-position and time of day)
             const gradient = skyCtx.createLinearGradient(0, 0, 0, height);
-            gradient.addColorStop(0, '#87CEEB'); // Sky blue at zenith
-            gradient.addColorStop(0.7, '#B0D4E8'); // Lighter blue
-            gradient.addColorStop(1, '#D4E8F0'); // Very light at horizon
+
+            // Brightness factor based on sun altitude
+            let brightness = 1.0;
+            if (sunPos.altitude < -18) {
+                brightness = 0; // Night (astronomical twilight)
+            } else if (sunPos.altitude < 0) {
+                brightness = (sunPos.altitude + 18) / 18; // Twilight
+            }
+
+            const skyBlue = [135, 206, 235]; // #87CEEB
+            const horizonBlue = [212, 232, 240]; // #D4E8F0
+
+            gradient.addColorStop(0, `rgb(${Math.floor(skyBlue[0] * brightness)}, ${Math.floor(skyBlue[1] * brightness)}, ${Math.floor(skyBlue[2] * brightness)})`);
+            gradient.addColorStop(0.7, `rgb(${Math.floor((skyBlue[0] + horizonBlue[0])/2 * brightness)}, ${Math.floor((skyBlue[1] + horizonBlue[1])/2 * brightness)}, ${Math.floor((skyBlue[2] + horizonBlue[2])/2 * brightness)})`);
+            gradient.addColorStop(1, `rgb(${Math.floor(horizonBlue[0] * brightness)}, ${Math.floor(horizonBlue[1] * brightness)}, ${Math.floor(horizonBlue[2] * brightness)})`);
+
             skyCtx.fillStyle = gradient;
             skyCtx.fillRect(0, 0, width, height);
 
@@ -751,8 +764,8 @@
         // Animation loop for year
         function animateYear() {
             yearFrameCounter++;
-            // Only advance day every 20 frames (slower animation)
-            if (yearFrameCounter >= 20) {
+            // Only advance day every 30 frames (slower animation)
+            if (yearFrameCounter >= 30) {
                 yearFrameCounter = 0;
                 let dayOfYear = parseInt(dayOfYearInput.value);
                 dayOfYear = (dayOfYear + 1) % 30;
