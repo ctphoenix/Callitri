@@ -289,20 +289,20 @@
 
         // Calculate solar declination based on axis orientation relative to sun
         function calculateDeclination(orbitalAngle, axisAngle) {
-            // Declination depends on the angle between the axis and the sun direction
-            // When axis points toward sun: positive declination (NH summer)
-            // When axis points away from sun: negative declination (NH winter)
-            // When axis is perpendicular to sun: zero declination (equinox)
+            // axisAngle: 0° = perpendicular to orbital plane (no seasons)
+            //           23.5° = Earth-like tilt
+            //            90° = axis in the orbital plane (extreme seasons)
+            // orbitalAngle: position in orbit
+            //               0° = spring equinox (declination = 0)
+            //              90° = summer solstice (max positive declination)
+            //             180° = fall equinox (declination = 0)
+            //             270° = winter solstice (max negative declination)
 
-            // Sun direction from Earth's perspective
-            const sunDirection = orbitalAngle + 180;
+            // Declination varies sinusoidally with orbital position
+            // Maximum declination equals the axial tilt
+            const declination = axisAngle * Math.sin(orbitalAngle * DEG_TO_RAD);
 
-            // Angle between axis and sun direction
-            const relativeTilt = (axisAngle - sunDirection + 180) % 360 - 180;
-
-            // Declination is the axis component toward the sun
-            // Simplified: when axis points toward sun (relativeTilt ≈ 0), max positive declination
-            return AXIAL_TILT * Math.cos(relativeTilt * DEG_TO_RAD);
+            return declination;
         }
 
         // Calculate sunrise/sunset hour angles
@@ -458,7 +458,8 @@
             orbitalCtx.restore();
 
             // Draw axis - rotates with Planet Rotation Angle slider
-            const axisAngle = rotationAngle * DEG_TO_RAD;
+            // Add 90° so that 0° = vertical (perpendicular to orbital plane)
+            const axisAngle = (rotationAngle + 90) * DEG_TO_RAD;
             const axisLength = 40;
             const axisDx = axisLength * Math.cos(axisAngle);
             const axisDy = axisLength * Math.sin(axisAngle);
@@ -726,8 +727,8 @@
         // Animation loop for day
         function animateDay() {
             let hourOfDay = parseFloat(hourOfDayInput.value);
-            hourOfDay = (hourOfDay + 0.1) % 24;
-            hourOfDayInput.value = hourOfDay;
+            hourOfDay = (hourOfDay + 0.2) % 24;
+            hourOfDayInput.value = hourOfDay.toFixed(2);
             updateDisplay();
 
             if (isPlayingDay) {
@@ -738,8 +739,8 @@
         // Animation loop for year
         function animateYear() {
             let dayOfYear = parseFloat(dayOfYearInput.value);
-            dayOfYear = (dayOfYear + 0.2) % 30; // Slower than day animation
-            dayOfYearInput.value = dayOfYear;
+            dayOfYear = (dayOfYear + 0.3) % 30;
+            dayOfYearInput.value = Math.floor(dayOfYear); // Keep as integer
             updateDisplay();
 
             if (isPlayingYear) {
