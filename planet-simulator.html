@@ -194,7 +194,10 @@
                     Day of Year (30 days total):
                     <span class="value-display" id="dayOfYearDisplay">Day 0</span>
                 </label>
-                <input type="range" id="dayOfYear" min="0" max="29" value="0" step="1">
+                <div class="day-controls">
+                    <input type="range" id="dayOfYear" min="0" max="29" value="0" step="1" style="flex: 1;">
+                    <button id="playYearBtn">▶ Play Year</button>
+                </div>
             </div>
 
             <div class="control-group">
@@ -202,7 +205,7 @@
                     Axial Tilt Angle (Yellow Bar):
                     <span class="value-display" id="axisAngleDisplay">90°</span>
                 </label>
-                <input type="range" id="axisAngle" min="0" max="360" value="90" step="1">
+                <input type="range" id="axisAngle" min="0" max="90" value="23" step="1">
             </div>
 
             <div class="control-group">
@@ -271,10 +274,13 @@
         const latitudeInput = document.getElementById('latitude');
         const hourOfDayInput = document.getElementById('hourOfDay');
         const playPauseBtn = document.getElementById('playPauseBtn');
+        const playYearBtn = document.getElementById('playYearBtn');
 
         // State
-        let isPlaying = false;
-        let animationFrame = null;
+        let isPlayingDay = false;
+        let isPlayingYear = false;
+        let dayAnimationFrame = null;
+        let yearAnimationFrame = null;
 
         // Constants
         const AXIAL_TILT = 23.5; // degrees
@@ -464,20 +470,25 @@
             orbitalCtx.lineTo(earthX + axisDx, earthY + axisDy);
             orbitalCtx.stroke();
 
-            // Draw fixed latitude marker (doesn't move with orbital position or rotation angle)
-            // Position in orbital frame
-            const markerAngle = 0; // Fixed angle in orbital frame
-            const markerDist = 25 * Math.cos(latitude * DEG_TO_RAD);
-            const markerX = earthX + markerDist * Math.cos(markerAngle);
-            const markerY = earthY + markerDist * Math.sin(markerAngle) - 25 * Math.sin(latitude * DEG_TO_RAD);
+            // Draw latitude marker on the sunlit side (subsolar meridian)
+            // This marks the chosen latitude at solar noon
+            orbitalCtx.save();
+            orbitalCtx.translate(earthX, earthY);
+            orbitalCtx.rotate(sunDirection); // Align with sun direction
+
+            // Position at chosen latitude on the sun-facing side
+            const latRadius = 25 * Math.cos(latitude * DEG_TO_RAD);
+            const latHeight = 25 * Math.sin(latitude * DEG_TO_RAD);
 
             orbitalCtx.fillStyle = '#FF6B6B';
             orbitalCtx.strokeStyle = '#FFF';
             orbitalCtx.lineWidth = 2;
             orbitalCtx.beginPath();
-            orbitalCtx.arc(markerX, markerY, 5, 0, 2 * Math.PI);
+            orbitalCtx.arc(latRadius, -latHeight, 5, 0, 2 * Math.PI); // Negative because canvas y is down
             orbitalCtx.fill();
             orbitalCtx.stroke();
+
+            orbitalCtx.restore();
 
             // Draw labels
             orbitalCtx.fillStyle = '#fff';
@@ -712,15 +723,27 @@
             drawSkyView(latitude, declination, hourAngle);
         }
 
-        // Animation loop
-        function animate() {
+        // Animation loop for day
+        function animateDay() {
             let hourOfDay = parseFloat(hourOfDayInput.value);
             hourOfDay = (hourOfDay + 0.1) % 24;
             hourOfDayInput.value = hourOfDay;
             updateDisplay();
 
-            if (isPlaying) {
-                animationFrame = requestAnimationFrame(animate);
+            if (isPlayingDay) {
+                dayAnimationFrame = requestAnimationFrame(animateDay);
+            }
+        }
+
+        // Animation loop for year
+        function animateYear() {
+            let dayOfYear = parseFloat(dayOfYearInput.value);
+            dayOfYear = (dayOfYear + 0.2) % 30; // Slower than day animation
+            dayOfYearInput.value = dayOfYear;
+            updateDisplay();
+
+            if (isPlayingYear) {
+                yearAnimationFrame = requestAnimationFrame(animateYear);
             }
         }
 
@@ -731,14 +754,27 @@
         hourOfDayInput.addEventListener('input', updateDisplay);
 
         playPauseBtn.addEventListener('click', () => {
-            isPlaying = !isPlaying;
-            if (isPlaying) {
+            isPlayingDay = !isPlayingDay;
+            if (isPlayingDay) {
                 playPauseBtn.textContent = '⏸ Pause';
-                animate();
+                animateDay();
             } else {
                 playPauseBtn.textContent = '▶ Play Day';
-                if (animationFrame) {
-                    cancelAnimationFrame(animationFrame);
+                if (dayAnimationFrame) {
+                    cancelAnimationFrame(dayAnimationFrame);
+                }
+            }
+        });
+
+        playYearBtn.addEventListener('click', () => {
+            isPlayingYear = !isPlayingYear;
+            if (isPlayingYear) {
+                playYearBtn.textContent = '⏸ Pause';
+                animateYear();
+            } else {
+                playYearBtn.textContent = '▶ Play Year';
+                if (yearAnimationFrame) {
+                    cancelAnimationFrame(yearAnimationFrame);
                 }
             }
         });
