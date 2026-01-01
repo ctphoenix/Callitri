@@ -382,26 +382,104 @@
             return (2 * hourAngle) / 15; // Convert to hours (15° per hour)
         }
 
-        // Calculate sun position (altitude and azimuth)
-        function calculateSunPosition(latitude, declination, hourAngle) {
+        // Calculate sun position using full 3D vector geometry
+        // This works correctly for all axial tilts, including extreme cases
+        function calculateSunPosition3D(latitude, orbitalAngle, axisAngle, hourOfDay) {
             const latRad = latitude * DEG_TO_RAD;
-            const decRad = declination * DEG_TO_RAD;
-            const haRad = hourAngle * DEG_TO_RAD;
+            const orbitalRad = orbitalAngle * DEG_TO_RAD;
+            const axisRad = axisAngle * DEG_TO_RAD;
+            const hourAngleRad = (hourOfDay - 12) * 15 * DEG_TO_RAD;
 
-            // Altitude
-            const sinAlt = Math.sin(latRad) * Math.sin(decRad) +
-                          Math.cos(latRad) * Math.cos(decRad) * Math.cos(haRad);
-            const altitude = Math.asin(sinAlt) * RAD_TO_DEG;
+            // 1. Planet's rotation axis direction in 3D space
+            // Axis tilts in the plane perpendicular to sun-planet line, rotates with orbit
+            const axisX = Math.sin(axisRad) * Math.sin(orbitalRad);
+            const axisY = -Math.sin(axisRad) * Math.cos(orbitalRad);
+            const axisZ = Math.cos(axisRad);
 
-            // Azimuth (measured from North, clockwise)
-            const cosAz = (Math.sin(decRad) - Math.sin(latRad) * sinAlt) /
-                         (Math.cos(latRad) * Math.cos(Math.asin(sinAlt)));
-            let azimuth = Math.acos(Math.max(-1, Math.min(1, cosAz))) * RAD_TO_DEG;
+            // 2. Sun direction (from planet, parallel rays assumption)
+            const sunDirX = -Math.cos(orbitalRad);
+            const sunDirY = -Math.sin(orbitalRad);
+            const sunDirZ = 0;
 
-            // Adjust azimuth for afternoon (when hour angle > 0)
-            if (hourAngle > 0) {
-                azimuth = 360 - azimuth;
+            // 3. Calculate equatorial basis vectors
+            // sunEq = component of sun direction perpendicular to axis, normalized
+            const dotProduct = sunDirX * axisX + sunDirY * axisY + sunDirZ * axisZ;
+            let sunEqX = sunDirX - dotProduct * axisX;
+            let sunEqY = sunDirY - dotProduct * axisY;
+            let sunEqZ = sunDirZ - dotProduct * axisZ;
+
+            const sunEqLen = Math.sqrt(sunEqX*sunEqX + sunEqY*sunEqY + sunEqZ*sunEqZ);
+            if (sunEqLen > 0.0001) {
+                sunEqX /= sunEqLen;
+                sunEqY /= sunEqLen;
+                sunEqZ /= sunEqLen;
             }
+
+            // east = axis × sunEq (cross product)
+            const eastX = axisY * sunEqZ - axisZ * sunEqY;
+            const eastY = axisZ * sunEqX - axisX * sunEqZ;
+            const eastZ = axisX * sunEqY - axisY * sunEqX;
+
+            // 4. Observer position on planet surface (unit sphere)
+            // Position = sin(lat)*axis + cos(lat)*(cos(h)*sunEq + sin(h)*east)
+            const obsX = Math.sin(latRad) * axisX +
+                        Math.cos(latRad) * (Math.cos(hourAngleRad) * sunEqX + Math.sin(hourAngleRad) * eastX);
+            const obsY = Math.sin(latRad) * axisY +
+                        Math.cos(latRad) * (Math.cos(hourAngleRad) * sunEqY + Math.sin(hourAngleRad) * eastY);
+            const obsZ = Math.sin(latRad) * axisZ +
+                        Math.cos(latRad) * (Math.cos(hourAngleRad) * sunEqZ + Math.sin(hourAngleRad) * eastZ);
+
+            // Normalize (should already be normalized, but ensure it)
+            const obsLen = Math.sqrt(obsX*obsX + obsY*obsY + obsZ*obsZ);
+            const upX = obsX / obsLen;
+            const upY = obsY / obsLen;
+            const upZ = obsZ / obsLen;
+
+            // 5. Calculate altitude
+            // Altitude = angle of sun above horizon = 90° - angle from zenith
+            const dotSunUp = sunDirX * upX + sunDirY * upY + sunDirZ * upZ;
+            const altitude = Math.asin(dotSunUp) * RAD_TO_DEG;
+
+            // 6. Calculate azimuth
+            // Project sun direction onto horizontal plane
+            const sunHorizX = sunDirX - dotSunUp * upX;
+            const sunHorizY = sunDirY - dotSunUp * upY;
+            const sunHorizZ = sunDirZ - dotSunUp * upZ;
+
+            const sunHorizLen = Math.sqrt(sunHorizX*sunHorizX + sunHorizY*sunHorizY + sunHorizZ*sunHorizZ);
+
+            if (sunHorizLen < 0.0001) {
+                // Sun directly overhead or directly below
+                return { altitude, azimuth: 0 };
+            }
+
+            const sunHorizXn = sunHorizX / sunHorizLen;
+            const sunHorizYn = sunHorizY / sunHorizLen;
+            const sunHorizZn = sunHorizZ / sunHorizLen;
+
+            // North direction: component of axis perpendicular to up
+            const dotAxisUp = axisX * upX + axisY * upY + axisZ * upZ;
+            let northX = axisX - dotAxisUp * upX;
+            let northY = axisY - dotAxisUp * upY;
+            let northZ = axisZ - dotAxisUp * upZ;
+
+            const northLen = Math.sqrt(northX*northX + northY*northY + northZ*northZ);
+            if (northLen > 0.0001) {
+                northX /= northLen;
+                northY /= northLen;
+                northZ /= northLen;
+            }
+
+            // East = up × north (cross product)
+            const eastAzX = upY * northZ - upZ * northY;
+            const eastAzY = upZ * northX - upX * northZ;
+            const eastAzZ = upX * northY - upY * northX;
+
+            // Azimuth angle
+            const cosAz = sunHorizXn * northX + sunHorizYn * northY + sunHorizZn * northZ;
+            const sinAz = sunHorizXn * eastAzX + sunHorizYn * eastAzY + sunHorizZn * eastAzZ;
+            let azimuth = Math.atan2(sinAz, cosAz) * RAD_TO_DEG;
+            if (azimuth < 0) azimuth += 360;
 
             return { altitude, azimuth };
         }
@@ -645,12 +723,12 @@
         }
 
         // Draw sky view as azimuth-altitude chart
-        function drawSkyView(latitude, declination, hourAngle) {
+        function drawSkyView(latitude, orbitalAngle, axisAngle, hourOfDay) {
             const width = skyCanvas.width;
             const height = skyCanvas.height;
 
-            // Calculate current sun position
-            const sunPos = calculateSunPosition(latitude, declination, hourAngle);
+            // Calculate current sun position using 3D geometry
+            const sunPos = calculateSunPosition3D(latitude, orbitalAngle, axisAngle, hourOfDay);
 
             // Background gradient (brightness varies with y-position and time of day)
             const gradient = skyCtx.createLinearGradient(0, 0, 0, height);
@@ -754,8 +832,7 @@
 
             let pathStarted = false;
             for (let h = 0; h <= 24; h += 0.25) {
-                const ha = (h - 12) * 15; // Hour angle
-                const pos = calculateSunPosition(latitude, declination, ha);
+                const pos = calculateSunPosition3D(latitude, orbitalAngle, axisAngle, h);
 
                 if (pos.altitude > -5 && pos.azimuth >= minAz && pos.azimuth <= maxAz) {
                     const x = ((pos.azimuth - minAz) / azRange) * width;
@@ -811,12 +888,9 @@
             // Convert day of year (0-29) to orbital angle (0-360°)
             const orbitalAngle = (dayOfYear * 360 / 30) % 360;
 
-            // Convert hour of day to hour angle (solar noon = 0)
-            const hourAngle = (hourOfDay - 12) * 15;
-
             const declination = calculateDeclination(orbitalAngle, axisAngle);
             const dayLength = calculateDayLength(latitude, declination);
-            const sunPos = calculateSunPosition(latitude, declination, hourAngle);
+            const sunPos = calculateSunPosition3D(latitude, orbitalAngle, axisAngle, hourOfDay);
 
             // Update day of year display
             document.getElementById('dayOfYearDisplay').textContent = `Day ${dayOfYear}`;
@@ -889,7 +963,7 @@
 
             // Redraw visualizations
             drawOrbitalView(orbitalAngle, declination, axisAngle, latitude, hourOfDay);
-            drawSkyView(latitude, declination, hourAngle);
+            drawSkyView(latitude, orbitalAngle, axisAngle, hourOfDay);
         }
 
         // Animation loop for day
