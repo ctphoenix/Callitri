@@ -281,6 +281,7 @@
         let isPlayingYear = false;
         let dayAnimationFrame = null;
         let yearAnimationFrame = null;
+        let yearFrameCounter = 0;
 
         // Constants
         const AXIAL_TILT = 23.5; // degrees
@@ -471,21 +472,29 @@
             orbitalCtx.lineTo(earthX + axisDx, earthY + axisDy);
             orbitalCtx.stroke();
 
-            // Draw latitude marker on the sunlit side (subsolar meridian)
-            // This marks the chosen latitude at solar noon
+            // Draw latitude marker relative to the planet's axis
+            // Latitude is measured from the equator (perpendicular to axis)
             orbitalCtx.save();
             orbitalCtx.translate(earthX, earthY);
-            orbitalCtx.rotate(sunDirection); // Align with sun direction
 
-            // Position at chosen latitude on the sun-facing side
-            const latRadius = 25 * Math.cos(latitude * DEG_TO_RAD);
-            const latHeight = 25 * Math.sin(latitude * DEG_TO_RAD);
+            // The equator is perpendicular to the axis
+            // Axis is at (rotationAngle + 90)°, so equator plane is at rotationAngle°
+            const equatorAngle = rotationAngle * DEG_TO_RAD;
+
+            // Rotate to align with equator, then offset by latitude
+            orbitalCtx.rotate(equatorAngle);
+
+            // Position marker at the chosen latitude
+            // Latitude 0 = on equator, 90 = at north pole, -90 = at south pole
+            const latAngle = (90 - latitude) * DEG_TO_RAD; // Angle from north pole
+            const markerX = 25 * Math.sin(latAngle);
+            const markerY = -25 * Math.cos(latAngle); // Negative because canvas y is down
 
             orbitalCtx.fillStyle = '#FF6B6B';
             orbitalCtx.strokeStyle = '#FFF';
             orbitalCtx.lineWidth = 2;
             orbitalCtx.beginPath();
-            orbitalCtx.arc(latRadius, -latHeight, 5, 0, 2 * Math.PI); // Negative because canvas y is down
+            orbitalCtx.arc(markerX, markerY, 5, 0, 2 * Math.PI);
             orbitalCtx.fill();
             orbitalCtx.stroke();
 
@@ -523,16 +532,11 @@
             // Calculate current sun position
             const sunPos = calculateSunPosition(latitude, declination, hourAngle);
 
-            // Background gradient (sky blue to darker at horizon)
+            // Background gradient (brightness depends on y-position only, not sun)
             const gradient = skyCtx.createLinearGradient(0, 0, 0, height);
-            if (sunPos.altitude > 0) {
-                gradient.addColorStop(0, '#87CEEB');
-                gradient.addColorStop(0.7, '#B0D4E8');
-                gradient.addColorStop(1, '#D4E8F0');
-            } else {
-                gradient.addColorStop(0, '#0a0a1a');
-                gradient.addColorStop(1, '#1a1a3a');
-            }
+            gradient.addColorStop(0, '#87CEEB'); // Sky blue at zenith
+            gradient.addColorStop(0.7, '#B0D4E8'); // Lighter blue
+            gradient.addColorStop(1, '#D4E8F0'); // Very light at horizon
             skyCtx.fillStyle = gradient;
             skyCtx.fillRect(0, 0, width, height);
 
@@ -554,13 +558,20 @@
                 skyCtx.stroke();
             }
 
+            // Azimuth range: 85° to 275° (190° total, padding E/W by 5°)
+            const minAz = 85;
+            const maxAz = 275;
+            const azRange = maxAz - minAz;
+
             // Azimuth grid lines (every 45°)
-            for (let az = 0; az <= 360; az += 45) {
-                const x = (az / 360) * width;
-                skyCtx.beginPath();
-                skyCtx.moveTo(x, 20);
-                skyCtx.lineTo(x, horizonY);
-                skyCtx.stroke();
+            for (let az = 90; az <= 270; az += 45) {
+                if (az >= minAz && az <= maxAz) {
+                    const x = ((az - minAz) / azRange) * width;
+                    skyCtx.beginPath();
+                    skyCtx.moveTo(x, 20);
+                    skyCtx.lineTo(x, horizonY);
+                    skyCtx.stroke();
+                }
             }
 
             // Horizon line (thicker)
@@ -572,21 +583,23 @@
             skyCtx.stroke();
 
             // Labels
-            skyCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            skyCtx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // Darker for visibility
             skyCtx.font = '12px sans-serif';
             skyCtx.textAlign = 'center';
 
             // Azimuth labels
             const azLabels = [
-                { az: 0, label: 'N' },
                 { az: 90, label: 'E' },
+                { az: 135, label: 'SE' },
                 { az: 180, label: 'S' },
-                { az: 270, label: 'W' },
-                { az: 360, label: 'N' }
+                { az: 225, label: 'SW' },
+                { az: 270, label: 'W' }
             ];
             azLabels.forEach(({ az, label }) => {
-                const x = (az / 360) * width;
-                skyCtx.fillText(label, x, horizonY + 20);
+                if (az >= minAz && az <= maxAz) {
+                    const x = ((az - minAz) / azRange) * width;
+                    skyCtx.fillText(label, x, horizonY + 20);
+                }
             });
 
             // Altitude labels
@@ -611,8 +624,8 @@
                 const ha = (h - 12) * 15; // Hour angle
                 const pos = calculateSunPosition(latitude, declination, ha);
 
-                if (pos.altitude > -5) {
-                    const x = (pos.azimuth / 360) * width;
+                if (pos.altitude > -5 && pos.azimuth >= minAz && pos.azimuth <= maxAz) {
+                    const x = ((pos.azimuth - minAz) / azRange) * width;
                     const y = horizonY - (Math.max(0, pos.altitude) / 90) * (horizonY - 20);
 
                     if (!pathStarted) {
@@ -627,8 +640,8 @@
             skyCtx.setLineDash([]);
 
             // Draw current sun position
-            if (sunPos.altitude > -5) {
-                const sunX = (sunPos.azimuth / 360) * width;
+            if (sunPos.altitude > -5 && sunPos.azimuth >= minAz && sunPos.azimuth <= maxAz) {
+                const sunX = ((sunPos.azimuth - minAz) / azRange) * width;
                 const sunY = horizonY - (Math.max(0, sunPos.altitude) / 90) * (horizonY - 20);
 
                 // Sun glow
@@ -738,10 +751,15 @@
 
         // Animation loop for year
         function animateYear() {
-            let dayOfYear = parseFloat(dayOfYearInput.value);
-            dayOfYear = (dayOfYear + 0.3) % 30;
-            dayOfYearInput.value = Math.floor(dayOfYear); // Keep as integer
-            updateDisplay();
+            yearFrameCounter++;
+            // Only advance day every 20 frames (slower animation)
+            if (yearFrameCounter >= 20) {
+                yearFrameCounter = 0;
+                let dayOfYear = parseInt(dayOfYearInput.value);
+                dayOfYear = (dayOfYear + 1) % 30;
+                dayOfYearInput.value = dayOfYear;
+                updateDisplay();
+            }
 
             if (isPlayingYear) {
                 yearAnimationFrame = requestAnimationFrame(animateYear);
@@ -771,6 +789,7 @@
             isPlayingYear = !isPlayingYear;
             if (isPlayingYear) {
                 playYearBtn.textContent = '⏸ Pause';
+                yearFrameCounter = 0; // Reset frame counter
                 animateYear();
             } else {
                 playYearBtn.textContent = '▶ Play Year';
