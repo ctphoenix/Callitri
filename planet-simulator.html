@@ -571,12 +571,9 @@
             orbitalCtx.lineWidth = 3;
             orbitalCtx.strokeText('S', southX, southY);
 
-            // Draw equator line (perpendicular to axis, rotates with planet)
+            // Draw equator line (perpendicular to axis, fixed to planet)
             orbitalCtx.save();
             orbitalCtx.translate(earthX, earthY);
-            orbitalCtx.rotate(sunDirection); // Align with sun
-            const hourAngleRad = (hourOfDay - 12) * 15 * DEG_TO_RAD; // Planet rotation
-            orbitalCtx.rotate(hourAngleRad); // Rotate with daily rotation
             orbitalCtx.rotate(axisAngle + Math.PI / 2); // Perpendicular to axis
             orbitalCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
             orbitalCtx.lineWidth = 2;
@@ -588,25 +585,30 @@
             orbitalCtx.setLineDash([]);
             orbitalCtx.restore();
 
-            // Draw latitude marker at FIXED location on planet (rotates with daily rotation)
+            // Draw latitude marker at FIXED location on planet
             // The marker represents a person standing at this latitude
-            // As hours pass, the planet rotates and this person moves through day/night
+            // We can't properly show daily rotation around a tilted axis in 2D,
+            // so we just show their fixed position on the planet's surface
             orbitalCtx.save();
             orbitalCtx.translate(earthX, earthY);
-            orbitalCtx.rotate(sunDirection); // Align with sun
-            orbitalCtx.rotate(hourAngleRad); // Rotate planet based on time of day
 
-            // Now in planet-fixed frame rotated to current hour:
-            // - At hour 12, observer faces sun (x-axis points toward sun)
-            // - At hour 0, observer faces away (x-axis points away from sun)
-            // - At hour 6/18, observer is at sunrise/sunset
+            // Position the observer at their latitude along the axis
+            // Simply: distance along axis = sin(latitude), perpendicular distance = cos(latitude)
+            // Place them on the "visible" side (toward viewer/arbitrary choice)
             const latRad = latitude * DEG_TO_RAD;
 
-            // Position along observer's meridian at latitude L:
-            // - Component along axis: sin(L)
-            // - Component in equatorial plane toward observer: cos(L)
-            const markerX = 25 * (Math.sin(latRad) * Math.cos(axisAngle) + Math.cos(latRad));
-            const markerY = 25 * Math.sin(latRad) * Math.sin(axisAngle);
+            // Component along the axis
+            const axisComponent = Math.sin(latRad) * 25;
+            const axisDirX = Math.cos(axisAngle);
+            const axisDirY = Math.sin(axisAngle);
+
+            // Component perpendicular to axis (in equatorial plane) - place on "front" side
+            const equatorialComponent = Math.cos(latRad) * 25;
+            const perpDirX = -Math.sin(axisAngle); // Perpendicular to axis
+            const perpDirY = Math.cos(axisAngle);
+
+            const markerX = axisComponent * axisDirX + equatorialComponent * perpDirX;
+            const markerY = axisComponent * axisDirY + equatorialComponent * perpDirY;
 
             orbitalCtx.fillStyle = '#FF6B6B';
             orbitalCtx.strokeStyle = '#FFF';
