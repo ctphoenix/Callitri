@@ -173,7 +173,7 @@
         }
 
         .sky-view {
-            height: 300px;
+            height: 400px;
         }
     </style>
 </head>
@@ -191,10 +191,18 @@
         <div class="controls">
             <div class="control-group">
                 <label>
-                    Orbital Position (Time of Year):
-                    <span class="value-display" id="orbitalDisplay">Spring Equinox (0°)</span>
+                    Day of Year (30 days total):
+                    <span class="value-display" id="dayOfYearDisplay">Day 0</span>
                 </label>
-                <input type="range" id="orbitalAngle" min="0" max="360" value="0" step="1">
+                <input type="range" id="dayOfYear" min="0" max="29" value="0" step="1">
+            </div>
+
+            <div class="control-group">
+                <label>
+                    Axial Tilt Angle (Yellow Bar):
+                    <span class="value-display" id="axisAngleDisplay">90°</span>
+                </label>
+                <input type="range" id="axisAngle" min="0" max="360" value="90" step="1">
             </div>
 
             <div class="control-group">
@@ -207,16 +215,19 @@
 
             <div class="control-group">
                 <label>
-                    Axial Tilt Angle (Yellow Bar):
-                    <span class="value-display" id="rotationDisplay">0°</span>
+                    Hour of Day:
+                    <span class="value-display" id="hourDisplay">12:00 (Noon)</span>
                 </label>
-                <input type="range" id="rotationAngle" min="0" max="360" value="90" step="1">
+                <div class="day-controls">
+                    <input type="range" id="hourOfDay" min="0" max="24" value="12" step="0.25" style="flex: 1;">
+                    <button id="playPauseBtn">▶ Play Day</button>
+                </div>
             </div>
         </div>
 
         <div class="visualization">
-            <h2 style="margin-bottom: 15px;">Sky View (Looking South from Northern Hemisphere)</h2>
-            <canvas id="skyCanvas" width="800" height="300" class="sky-view"></canvas>
+            <h2 style="margin-bottom: 15px;">Sky Chart (Azimuth × Altitude)</h2>
+            <canvas id="skyCanvas" width="800" height="400" class="sky-view"></canvas>
         </div>
 
         <div class="info-panel">
@@ -255,9 +266,15 @@
         const skyCtx = skyCanvas.getContext('2d');
 
         // Get controls
-        const orbitalAngleInput = document.getElementById('orbitalAngle');
+        const dayOfYearInput = document.getElementById('dayOfYear');
+        const axisAngleInput = document.getElementById('axisAngle');
         const latitudeInput = document.getElementById('latitude');
-        const rotationAngleInput = document.getElementById('rotationAngle');
+        const hourOfDayInput = document.getElementById('hourOfDay');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+
+        // State
+        let isPlaying = false;
+        let animationFrame = null;
 
         // Constants
         const AXIAL_TILT = 23.5; // degrees
@@ -417,10 +434,10 @@
             const sunDirection = Math.atan2(centerY - earthY, centerX - earthX);
             orbitalCtx.rotate(sunDirection);
 
-            // Draw night side (left half, away from sun)
+            // Draw night side (RIGHT half, away from sun)
             orbitalCtx.fillStyle = 'rgba(0, 0, 40, 0.6)';
             orbitalCtx.beginPath();
-            orbitalCtx.arc(0, 0, 25, Math.PI / 2, -Math.PI / 2, true);
+            orbitalCtx.arc(0, 0, 25, -Math.PI / 2, Math.PI / 2, true);
             orbitalCtx.closePath();
             orbitalCtx.fill();
 
@@ -486,84 +503,109 @@
             });
         }
 
-        // Draw sky view
+        // Draw sky view as azimuth-altitude chart
         function drawSkyView(latitude, declination, hourAngle) {
             const width = skyCanvas.width;
             const height = skyCanvas.height;
 
-            // Calculate sun position based on hour angle (0 = solar noon)
+            // Calculate current sun position
             const sunPos = calculateSunPosition(latitude, declination, hourAngle);
 
-            // Sky gradient (day/night)
-            const isDaytime = sunPos.altitude > -6; // Civil twilight threshold
+            // Background gradient (sky blue to darker at horizon)
             const gradient = skyCtx.createLinearGradient(0, 0, 0, height);
-
             if (sunPos.altitude > 0) {
-                const brightness = Math.min(1, sunPos.altitude / 45);
-                gradient.addColorStop(0, `rgb(${Math.floor(135 * brightness)}, ${Math.floor(206 * brightness)}, ${Math.floor(250 * brightness)})`);
-                gradient.addColorStop(1, `rgb(${Math.floor(176 * brightness)}, ${Math.floor(224 * brightness)}, ${Math.floor(230 * brightness)})`);
-            } else if (sunPos.altitude > -6) {
-                const twilight = (sunPos.altitude + 6) / 6;
-                gradient.addColorStop(0, `rgb(${Math.floor(50 * twilight)}, ${Math.floor(70 * twilight)}, ${Math.floor(100 * twilight)})`);
-                gradient.addColorStop(1, `rgb(${Math.floor(100 * twilight)}, ${Math.floor(120 * twilight)}, ${Math.floor(150 * twilight)})`);
+                gradient.addColorStop(0, '#87CEEB');
+                gradient.addColorStop(0.7, '#B0D4E8');
+                gradient.addColorStop(1, '#D4E8F0');
             } else {
                 gradient.addColorStop(0, '#0a0a1a');
                 gradient.addColorStop(1, '#1a1a3a');
             }
-
             skyCtx.fillStyle = gradient;
             skyCtx.fillRect(0, 0, width, height);
 
-            // Draw horizon line
-            const horizonY = height * 0.7;
-            skyCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            // Ground (below horizon)
+            const horizonY = height - 50; // Reserve 50px at bottom for grass
+            skyCtx.fillStyle = 'rgba(34, 139, 34, 0.5)';
+            skyCtx.fillRect(0, horizonY, width, height - horizonY);
+
+            // Grid lines
+            skyCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            skyCtx.lineWidth = 1;
+
+            // Altitude grid lines (every 15°)
+            for (let alt = 0; alt <= 90; alt += 15) {
+                const y = horizonY - (alt / 90) * (horizonY - 20);
+                skyCtx.beginPath();
+                skyCtx.moveTo(0, y);
+                skyCtx.lineTo(width, y);
+                skyCtx.stroke();
+            }
+
+            // Azimuth grid lines (every 45°)
+            for (let az = 0; az <= 360; az += 45) {
+                const x = (az / 360) * width;
+                skyCtx.beginPath();
+                skyCtx.moveTo(x, 20);
+                skyCtx.lineTo(x, horizonY);
+                skyCtx.stroke();
+            }
+
+            // Horizon line (thicker)
+            skyCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
             skyCtx.lineWidth = 2;
             skyCtx.beginPath();
             skyCtx.moveTo(0, horizonY);
             skyCtx.lineTo(width, horizonY);
             skyCtx.stroke();
 
-            // Draw compass directions
-            skyCtx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            skyCtx.font = '14px sans-serif';
+            // Labels
+            skyCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            skyCtx.font = '12px sans-serif';
             skyCtx.textAlign = 'center';
 
-            const directions = [
-                { label: 'E', x: 50 },
-                { label: 'S', x: width / 2 },
-                { label: 'W', x: width - 50 }
+            // Azimuth labels
+            const azLabels = [
+                { az: 0, label: 'N' },
+                { az: 90, label: 'E' },
+                { az: 180, label: 'S' },
+                { az: 270, label: 'W' },
+                { az: 360, label: 'N' }
             ];
-
-            directions.forEach(dir => {
-                skyCtx.fillText(dir.label, dir.x, horizonY + 25);
+            azLabels.forEach(({ az, label }) => {
+                const x = (az / 360) * width;
+                skyCtx.fillText(label, x, horizonY + 20);
             });
 
-            // Draw sun path arc
-            skyCtx.strokeStyle = 'rgba(255, 200, 0, 0.3)';
+            // Altitude labels
+            skyCtx.textAlign = 'left';
+            for (let alt = 0; alt <= 90; alt += 30) {
+                const y = horizonY - (alt / 90) * (horizonY - 20);
+                skyCtx.fillText(`${alt}°`, 5, y - 3);
+            }
+
+            // "Zenith" label
+            skyCtx.textAlign = 'center';
+            skyCtx.fillText('Zenith', width / 2, 15);
+
+            // Draw sun path for full day
+            skyCtx.strokeStyle = 'rgba(255, 200, 0, 0.4)';
             skyCtx.lineWidth = 2;
             skyCtx.setLineDash([5, 5]);
             skyCtx.beginPath();
 
-            for (let h = -12; h <= 12; h += 0.5) {
-                const ha = h * 15;
+            let pathStarted = false;
+            for (let h = 0; h <= 24; h += 0.25) {
+                const ha = (h - 12) * 15; // Hour angle
                 const pos = calculateSunPosition(latitude, declination, ha);
 
-                if (pos.altitude > -10) {
-                    // Map azimuth to x (90° = left, 180° = center, 270° = right)
-                    let x;
-                    if (latitude >= 0) {
-                        // Northern hemisphere: looking south
-                        x = width * ((pos.azimuth - 90) / 180);
-                    } else {
-                        // Southern hemisphere: looking north
-                        x = width * ((270 - pos.azimuth) / 180);
-                    }
+                if (pos.altitude > -5) {
+                    const x = (pos.azimuth / 360) * width;
+                    const y = horizonY - (Math.max(0, pos.altitude) / 90) * (horizonY - 20);
 
-                    // Map altitude to y (0° = horizon, 90° = zenith)
-                    const y = horizonY - (pos.altitude / 90) * (horizonY - 20);
-
-                    if (h === -12) {
+                    if (!pathStarted) {
                         skyCtx.moveTo(x, y);
+                        pathStarted = true;
                     } else {
                         skyCtx.lineTo(x, y);
                     }
@@ -573,17 +615,12 @@
             skyCtx.setLineDash([]);
 
             // Draw current sun position
-            if (sunPos.altitude > -6) {
-                let sunX;
-                if (latitude >= 0) {
-                    sunX = width * ((sunPos.azimuth - 90) / 180);
-                } else {
-                    sunX = width * ((270 - sunPos.azimuth) / 180);
-                }
-                const sunY = horizonY - (sunPos.altitude / 90) * (horizonY - 20);
+            if (sunPos.altitude > -5) {
+                const sunX = (sunPos.azimuth / 360) * width;
+                const sunY = horizonY - (Math.max(0, sunPos.altitude) / 90) * (horizonY - 20);
 
                 // Sun glow
-                const sunSize = 25 + Math.max(0, sunPos.altitude) / 90 * 15;
+                const sunSize = sunPos.altitude > 0 ? 20 : 15;
                 const sunGradient = skyCtx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunSize);
                 sunGradient.addColorStop(0, '#FFF9E6');
                 sunGradient.addColorStop(0.4, '#FFD700');
@@ -596,41 +633,51 @@
                 // Sun body
                 skyCtx.fillStyle = '#FDB813';
                 skyCtx.beginPath();
-                skyCtx.arc(sunX, sunY, 15, 0, 2 * Math.PI);
+                skyCtx.arc(sunX, sunY, 10, 0, 2 * Math.PI);
                 skyCtx.fill();
-            }
 
-            // Draw ground
-            skyCtx.fillStyle = 'rgba(34, 139, 34, 0.3)';
-            skyCtx.fillRect(0, horizonY, width, height - horizonY);
+                // Sun outline
+                skyCtx.strokeStyle = '#FFF';
+                skyCtx.lineWidth = 1;
+                skyCtx.stroke();
+            }
         }
 
         // Update display values
         function updateDisplay() {
-            const orbitalAngle = parseFloat(orbitalAngleInput.value);
+            const dayOfYear = parseFloat(dayOfYearInput.value);
+            const axisAngle = parseFloat(axisAngleInput.value);
             const latitude = parseFloat(latitudeInput.value);
-            const axisAngle = parseFloat(rotationAngleInput.value);
+            const hourOfDay = parseFloat(hourOfDayInput.value);
+
+            // Convert day of year (0-29) to orbital angle (0-360°)
+            const orbitalAngle = (dayOfYear * 360 / 30) % 360;
+
+            // Convert hour of day to hour angle (solar noon = 0)
+            const hourAngle = (hourOfDay - 12) * 15;
 
             const declination = calculateDeclination(orbitalAngle, axisAngle);
             const dayLength = calculateDayLength(latitude, declination);
-
-            // For now, assume we're viewing at "noon" (planet not spinning yet)
-            const hourAngle = 0;
             const sunPos = calculateSunPosition(latitude, declination, hourAngle);
 
-            // Update orbital display
-            const season = getSeason(orbitalAngle);
-            const seasonEmoji = getSeasonEmoji(orbitalAngle);
-            document.getElementById('orbitalDisplay').textContent =
-                `${season} ${seasonEmoji} (${orbitalAngle}°)`;
+            // Update day of year display
+            document.getElementById('dayOfYearDisplay').textContent = `Day ${dayOfYear}`;
+
+            // Update axis angle display
+            document.getElementById('axisAngleDisplay').textContent = `${axisAngle}°`;
 
             // Update latitude display
             const latLabel = latitude === 0 ? 'Equator' :
                            latitude > 0 ? `${latitude}° N` : `${Math.abs(latitude)}° S`;
             document.getElementById('latitudeDisplay').textContent = `${latLabel}`;
 
-            // Update axis angle display
-            document.getElementById('rotationDisplay').textContent = `${axisAngle}°`;
+            // Update hour display
+            const hours = Math.floor(hourOfDay);
+            const minutes = Math.floor((hourOfDay - hours) * 60);
+            const timeLabel = hours === 12 && minutes === 0 ? 'Noon' :
+                            hours === 0 && minutes === 0 ? 'Midnight' : '';
+            document.getElementById('hourDisplay').textContent =
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}${timeLabel ? ' (' + timeLabel + ')' : ''}`;
 
             // Update info panel
             const dayHours = Math.floor(dayLength);
@@ -641,6 +688,9 @@
                 `${dayHours}h ${dayMinutes}m`;
 
             document.getElementById('declination').textContent = `${declination.toFixed(1)}°`;
+
+            const season = getSeason(orbitalAngle);
+            const seasonEmoji = getSeasonEmoji(orbitalAngle);
             document.getElementById('season').textContent = `${season} ${seasonEmoji}`;
 
             if (sunPos.altitude > 0) {
@@ -653,19 +703,45 @@
                 document.getElementById('dayNight').textContent = '🌅 Twilight';
             } else {
                 document.getElementById('altitude').textContent = `${sunPos.altitude.toFixed(1)}°`;
-                document.getElementById('azimuth').textContent = `--°`;
+                document.getElementById('azimuth').textContent = `${sunPos.azimuth.toFixed(1)}°`;
                 document.getElementById('dayNight').textContent = '🌙 Night';
             }
 
             // Redraw visualizations
             drawOrbitalView(orbitalAngle, declination, axisAngle, latitude);
-            drawSkyView(latitude, declination, 0); // hourAngle = 0 for now (noon)
+            drawSkyView(latitude, declination, hourAngle);
+        }
+
+        // Animation loop
+        function animate() {
+            let hourOfDay = parseFloat(hourOfDayInput.value);
+            hourOfDay = (hourOfDay + 0.1) % 24;
+            hourOfDayInput.value = hourOfDay;
+            updateDisplay();
+
+            if (isPlaying) {
+                animationFrame = requestAnimationFrame(animate);
+            }
         }
 
         // Event listeners
-        orbitalAngleInput.addEventListener('input', updateDisplay);
+        dayOfYearInput.addEventListener('input', updateDisplay);
+        axisAngleInput.addEventListener('input', updateDisplay);
         latitudeInput.addEventListener('input', updateDisplay);
-        rotationAngleInput.addEventListener('input', updateDisplay);
+        hourOfDayInput.addEventListener('input', updateDisplay);
+
+        playPauseBtn.addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                playPauseBtn.textContent = '⏸ Pause';
+                animate();
+            } else {
+                playPauseBtn.textContent = '▶ Play Day';
+                if (animationFrame) {
+                    cancelAnimationFrame(animationFrame);
+                }
+            }
+        });
 
         // Initial draw
         updateDisplay();
