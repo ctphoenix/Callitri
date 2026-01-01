@@ -478,16 +478,18 @@
             orbitalCtx.translate(earthX, earthY);
             orbitalCtx.rotate(sunDirection); // Align with sun
 
-            // In sun-aligned frame:
-            // - Axis appears at angle β = axisAngle - sunDirection
-            // - Marker is at latitude L on the subsolar meridian (facing sun)
-            // Position: rotate point at (R*cos(L), R*sin(L)) by angle β
-            const beta = axisAngle - sunDirection;
+            // Correct geometry for latitude marker:
+            // We're in sun-aligned frame after rotation (sun is to the left at (-1,0))
+            // - Axis direction: (cos(axisAngle), sin(axisAngle))
+            // - Point at latitude L on subsolar meridian:
+            //   - Component along axis (toward north pole): sin(L)
+            //   - Component in equatorial plane (toward sun): cos(L)
             const latRad = latitude * DEG_TO_RAD;
 
-            // Marker position accounting for axis tilt (corrected formula)
-            const markerX = 25 * Math.cos(latRad + beta);
-            const markerY = -25 * Math.sin(latRad + beta);
+            // Position = sin(L) * axis_direction + cos(L) * sun_direction
+            // where axis_direction = (cos(α), sin(α)) and sun_direction = (-1, 0)
+            const markerX = 25 * (Math.sin(latRad) * Math.cos(axisAngle) - Math.cos(latRad));
+            const markerY = 25 * Math.sin(latRad) * Math.sin(axisAngle);
 
             orbitalCtx.fillStyle = '#FF6B6B';
             orbitalCtx.strokeStyle = '#FFF';
