@@ -207,14 +207,10 @@
 
             <div class="control-group">
                 <label>
-                    Planet Rotation Angle:
-                    <span class="value-display" id="rotationDisplay">0° (Noon)</span>
+                    Axial Tilt Angle (Yellow Bar):
+                    <span class="value-display" id="rotationDisplay">0°</span>
                 </label>
-                <div class="day-controls">
-                    <input type="range" id="rotationAngle" min="0" max="360" value="0" step="1" style="flex: 1;">
-                    <button id="playPauseBtn">▶ Play</button>
-                    <button id="resetBtn">↺ Reset</button>
-                </div>
+                <input type="range" id="rotationAngle" min="0" max="360" value="90" step="1">
             </div>
         </div>
 
@@ -262,22 +258,28 @@
         const orbitalAngleInput = document.getElementById('orbitalAngle');
         const latitudeInput = document.getElementById('latitude');
         const rotationAngleInput = document.getElementById('rotationAngle');
-        const playPauseBtn = document.getElementById('playPauseBtn');
-        const resetBtn = document.getElementById('resetBtn');
-
-        // State
-        let isPlaying = false;
-        let animationFrame = null;
 
         // Constants
         const AXIAL_TILT = 23.5; // degrees
         const DEG_TO_RAD = Math.PI / 180;
         const RAD_TO_DEG = 180 / Math.PI;
 
-        // Calculate solar declination based on day of year
-        function calculateDeclination(orbitalAngle) {
-            // 0° = Spring Equinox, 90° = Summer Solstice (NH), 180° = Fall Equinox, 270° = Winter Solstice (NH)
-            return -AXIAL_TILT * Math.cos((orbitalAngle + 90) * DEG_TO_RAD);
+        // Calculate solar declination based on axis orientation relative to sun
+        function calculateDeclination(orbitalAngle, axisAngle) {
+            // Declination depends on the angle between the axis and the sun direction
+            // When axis points toward sun: positive declination (NH summer)
+            // When axis points away from sun: negative declination (NH winter)
+            // When axis is perpendicular to sun: zero declination (equinox)
+
+            // Sun direction from Earth's perspective
+            const sunDirection = orbitalAngle + 180;
+
+            // Angle between axis and sun direction
+            const relativeTilt = (axisAngle - sunDirection + 180) % 360 - 180;
+
+            // Declination is the axis component toward the sun
+            // Simplified: when axis points toward sun (relativeTilt ≈ 0), max positive declination
+            return AXIAL_TILT * Math.cos(relativeTilt * DEG_TO_RAD);
         }
 
         // Calculate sunrise/sunset hour angles
@@ -407,7 +409,7 @@
             orbitalCtx.lineWidth = 2;
             orbitalCtx.stroke();
 
-            // Draw day/night terminator
+            // Draw day/night terminator (always perpendicular to sun direction)
             orbitalCtx.save();
             orbitalCtx.translate(earthX, earthY);
 
@@ -415,7 +417,7 @@
             const sunDirection = Math.atan2(centerY - earthY, centerX - earthX);
             orbitalCtx.rotate(sunDirection);
 
-            // Draw night side (left half)
+            // Draw night side (left half, away from sun)
             orbitalCtx.fillStyle = 'rgba(0, 0, 40, 0.6)';
             orbitalCtx.beginPath();
             orbitalCtx.arc(0, 0, 25, Math.PI / 2, -Math.PI / 2, true);
@@ -432,60 +434,32 @@
 
             orbitalCtx.restore();
 
-            // Draw selected latitude point (at the subsolar/noon meridian)
-            // The red dot only shows LATITUDE, not rotation
-            orbitalCtx.save();
-            orbitalCtx.translate(earthX, earthY);
-
-            // Rotate to align with sun (but NOT with planet rotation)
-            orbitalCtx.rotate(sunDirection);
-
-            // Position marker at selected latitude on the day side
-            // Latitude affects vertical position on the visible disk
-            const latRadius = 25 * Math.cos(latitude * DEG_TO_RAD);
-            const latY = -25 * Math.sin(latitude * DEG_TO_RAD);
-
-            // Draw marker
-            orbitalCtx.fillStyle = '#FF6B6B';
-            orbitalCtx.strokeStyle = '#FFF';
-            orbitalCtx.lineWidth = 2;
-            orbitalCtx.beginPath();
-            orbitalCtx.arc(latRadius, latY, 5, 0, 2 * Math.PI);
-            orbitalCtx.fill();
-            orbitalCtx.stroke();
-
-            orbitalCtx.restore();
-
-            // Draw rotation indicator on the equator to show planet rotation
-            orbitalCtx.save();
-            orbitalCtx.translate(earthX, earthY);
-
-            // Rotate by sun direction PLUS rotation angle
-            orbitalCtx.rotate(sunDirection + (rotationAngle * DEG_TO_RAD));
-
-            // Draw small indicator on equator
-            orbitalCtx.fillStyle = '#00D9FF';
-            orbitalCtx.strokeStyle = '#FFF';
-            orbitalCtx.lineWidth = 1.5;
-            orbitalCtx.beginPath();
-            orbitalCtx.arc(25, 0, 3, 0, 2 * Math.PI);
-            orbitalCtx.fill();
-            orbitalCtx.stroke();
-
-            orbitalCtx.restore();
-
-            // Draw axis tilt - FIXED orientation in space (this is key to seasons!)
-            // Axis always points in the same direction in the inertial frame
-            const axisAngleInSpace = (90 - AXIAL_TILT) * DEG_TO_RAD; // Fixed angle
+            // Draw axis - rotates with Planet Rotation Angle slider
+            const axisAngle = rotationAngle * DEG_TO_RAD;
             const axisLength = 40;
-            const axisDx = axisLength * Math.cos(axisAngleInSpace);
-            const axisDy = axisLength * Math.sin(axisAngleInSpace);
+            const axisDx = axisLength * Math.cos(axisAngle);
+            const axisDy = axisLength * Math.sin(axisAngle);
 
             orbitalCtx.strokeStyle = '#FFD700';
             orbitalCtx.lineWidth = 3;
             orbitalCtx.beginPath();
             orbitalCtx.moveTo(earthX - axisDx, earthY - axisDy);
             orbitalCtx.lineTo(earthX + axisDx, earthY + axisDy);
+            orbitalCtx.stroke();
+
+            // Draw fixed latitude marker (doesn't move with orbital position or rotation angle)
+            // Position in orbital frame
+            const markerAngle = 0; // Fixed angle in orbital frame
+            const markerDist = 25 * Math.cos(latitude * DEG_TO_RAD);
+            const markerX = earthX + markerDist * Math.cos(markerAngle);
+            const markerY = earthY + markerDist * Math.sin(markerAngle) - 25 * Math.sin(latitude * DEG_TO_RAD);
+
+            orbitalCtx.fillStyle = '#FF6B6B';
+            orbitalCtx.strokeStyle = '#FFF';
+            orbitalCtx.lineWidth = 2;
+            orbitalCtx.beginPath();
+            orbitalCtx.arc(markerX, markerY, 5, 0, 2 * Math.PI);
+            orbitalCtx.fill();
             orbitalCtx.stroke();
 
             // Draw labels
@@ -513,13 +487,11 @@
         }
 
         // Draw sky view
-        function drawSkyView(latitude, declination, rotationAngle) {
+        function drawSkyView(latitude, declination, hourAngle) {
             const width = skyCanvas.width;
             const height = skyCanvas.height;
 
-            // Convert rotation angle to hour angle (0° rotation = solar noon = 0° hour angle)
-            // Rotation angle: 0° = noon, 90° = afternoon, 180° = midnight, 270° = morning
-            const hourAngle = rotationAngle > 180 ? rotationAngle - 360 : rotationAngle;
+            // Calculate sun position based on hour angle (0 = solar noon)
             const sunPos = calculateSunPosition(latitude, declination, hourAngle);
 
             // Sky gradient (day/night)
@@ -633,31 +605,17 @@
             skyCtx.fillRect(0, horizonY, width, height - horizonY);
         }
 
-        // Get rotation time label
-        function getRotationLabel(rotationAngle) {
-            if (rotationAngle < 15 || rotationAngle >= 345) return 'Noon';
-            if (rotationAngle < 45) return 'Early Afternoon';
-            if (rotationAngle < 75) return 'Afternoon';
-            if (rotationAngle < 105) return 'Late Afternoon';
-            if (rotationAngle < 135) return 'Evening';
-            if (rotationAngle < 165) return 'Night';
-            if (rotationAngle < 195) return 'Midnight';
-            if (rotationAngle < 225) return 'Night';
-            if (rotationAngle < 255) return 'Pre-Dawn';
-            if (rotationAngle < 285) return 'Early Morning';
-            if (rotationAngle < 315) return 'Morning';
-            return 'Late Morning';
-        }
-
         // Update display values
         function updateDisplay() {
             const orbitalAngle = parseFloat(orbitalAngleInput.value);
             const latitude = parseFloat(latitudeInput.value);
-            const rotationAngle = parseFloat(rotationAngleInput.value);
+            const axisAngle = parseFloat(rotationAngleInput.value);
 
-            const declination = calculateDeclination(orbitalAngle);
+            const declination = calculateDeclination(orbitalAngle, axisAngle);
             const dayLength = calculateDayLength(latitude, declination);
-            const hourAngle = rotationAngle > 180 ? rotationAngle - 360 : rotationAngle;
+
+            // For now, assume we're viewing at "noon" (planet not spinning yet)
+            const hourAngle = 0;
             const sunPos = calculateSunPosition(latitude, declination, hourAngle);
 
             // Update orbital display
@@ -671,10 +629,8 @@
                            latitude > 0 ? `${latitude}° N` : `${Math.abs(latitude)}° S`;
             document.getElementById('latitudeDisplay').textContent = `${latLabel}`;
 
-            // Update rotation display
-            const rotationLabel = getRotationLabel(rotationAngle);
-            document.getElementById('rotationDisplay').textContent =
-                `${rotationAngle}° (${rotationLabel})`;
+            // Update axis angle display
+            document.getElementById('rotationDisplay').textContent = `${axisAngle}°`;
 
             // Update info panel
             const dayHours = Math.floor(dayLength);
@@ -702,44 +658,14 @@
             }
 
             // Redraw visualizations
-            drawOrbitalView(orbitalAngle, declination, rotationAngle, latitude);
-            drawSkyView(latitude, declination, rotationAngle);
-        }
-
-        // Animation loop
-        function animate() {
-            const rotationAngle = parseFloat(rotationAngleInput.value);
-            const newAngle = (rotationAngle + 2) % 360;
-            rotationAngleInput.value = newAngle;
-            updateDisplay();
-
-            if (isPlaying) {
-                animationFrame = requestAnimationFrame(animate);
-            }
+            drawOrbitalView(orbitalAngle, declination, axisAngle, latitude);
+            drawSkyView(latitude, declination, 0); // hourAngle = 0 for now (noon)
         }
 
         // Event listeners
         orbitalAngleInput.addEventListener('input', updateDisplay);
         latitudeInput.addEventListener('input', updateDisplay);
         rotationAngleInput.addEventListener('input', updateDisplay);
-
-        playPauseBtn.addEventListener('click', () => {
-            isPlaying = !isPlaying;
-            if (isPlaying) {
-                playPauseBtn.textContent = '⏸ Pause';
-                animate();
-            } else {
-                playPauseBtn.textContent = '▶ Play';
-                if (animationFrame) {
-                    cancelAnimationFrame(animationFrame);
-                }
-            }
-        });
-
-        resetBtn.addEventListener('click', () => {
-            rotationAngleInput.value = 0;
-            updateDisplay();
-        });
 
         // Initial draw
         updateDisplay();
