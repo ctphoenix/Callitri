@@ -423,7 +423,7 @@
         }
 
         // Draw orbital view
-        function drawOrbitalView(orbitalAngle, declination, rotationAngle, latitude) {
+        function drawOrbitalView(orbitalAngle, declination, rotationAngle, latitude, hourOfDay) {
             const width = orbitalCanvas.width;
             const height = orbitalCanvas.height;
             const centerX = width / 2;
@@ -571,9 +571,12 @@
             orbitalCtx.lineWidth = 3;
             orbitalCtx.strokeText('S', southX, southY);
 
-            // Draw equator line (perpendicular to axis)
+            // Draw equator line (perpendicular to axis, rotates with planet)
             orbitalCtx.save();
             orbitalCtx.translate(earthX, earthY);
+            orbitalCtx.rotate(sunDirection); // Align with sun
+            const hourAngleRad = (hourOfDay - 12) * 15 * DEG_TO_RAD; // Planet rotation
+            orbitalCtx.rotate(hourAngleRad); // Rotate with daily rotation
             orbitalCtx.rotate(axisAngle + Math.PI / 2); // Perpendicular to axis
             orbitalCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
             orbitalCtx.lineWidth = 2;
@@ -585,22 +588,23 @@
             orbitalCtx.setLineDash([]);
             orbitalCtx.restore();
 
-            // Draw latitude marker at the subsolar meridian
-            // Position is determined by latitude (from planet's equator) and axis orientation
+            // Draw latitude marker at FIXED location on planet (rotates with daily rotation)
+            // The marker represents a person standing at this latitude
+            // As hours pass, the planet rotates and this person moves through day/night
             orbitalCtx.save();
             orbitalCtx.translate(earthX, earthY);
             orbitalCtx.rotate(sunDirection); // Align with sun
+            orbitalCtx.rotate(hourAngleRad); // Rotate planet based on time of day
 
-            // Correct geometry for latitude marker:
-            // We're in sun-aligned frame after rotation (sun is to the RIGHT at (+1,0))
-            // - Axis direction: (cos(axisAngle), sin(axisAngle))
-            // - Point at latitude L on subsolar meridian:
-            //   - Component along axis (toward north pole): sin(L)
-            //   - Component in equatorial plane (toward sun): cos(L)
+            // Now in planet-fixed frame rotated to current hour:
+            // - At hour 12, observer faces sun (x-axis points toward sun)
+            // - At hour 0, observer faces away (x-axis points away from sun)
+            // - At hour 6/18, observer is at sunrise/sunset
             const latRad = latitude * DEG_TO_RAD;
 
-            // Position = sin(L) * axis_direction + cos(L) * sun_direction
-            // where axis_direction = (cos(α), sin(α)) and sun_direction = (+1, 0)
+            // Position along observer's meridian at latitude L:
+            // - Component along axis: sin(L)
+            // - Component in equatorial plane toward observer: cos(L)
             const markerX = 25 * (Math.sin(latRad) * Math.cos(axisAngle) + Math.cos(latRad));
             const markerY = 25 * Math.sin(latRad) * Math.sin(axisAngle);
 
@@ -882,7 +886,7 @@
             }
 
             // Redraw visualizations
-            drawOrbitalView(orbitalAngle, declination, axisAngle, latitude);
+            drawOrbitalView(orbitalAngle, declination, axisAngle, latitude, hourOfDay);
             drawSkyView(latitude, declination, hourAngle);
         }
 
